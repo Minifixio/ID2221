@@ -14,17 +14,16 @@ object ExportGraph {
     val vertices: Seq[(VertexId, (String, String, Long))] = graph.vertices.collect().toSeq
     val edges: Seq[Edge[String]] = graph.edges.collect().toSeq
 
-    // Step 2: Collect valid vertex IDs into a Set
     println(s"Number of vertices: ${vertices.length}")
     println(s"Number of edges: ${edges.length}")
     println(s"Valid vertex IDs: ${validVertexIds}")
 
-    // Step 3: Filter edges to include only those that point to valid vertices
+    // Step 2: Filter edges to include only those that point to valid vertices
     val filteredEdges = edges.filter { edge =>
       validVertexIds.contains(edge.srcId) && validVertexIds.contains(edge.dstId)
     }
 
-    // Step 4: Convert vertices to Sigma.js format, filtering out null attributes
+    // Step 3: Convert vertices to Sigma.js format, filtering out null attributes
     val random = new Random()
     val nodesJSON: List[JValue] = vertices.collect {
       case (id, (paperId, title, year)) if paperId != null && title != null =>
@@ -40,7 +39,7 @@ object ExportGraph {
         ): JValue // Ensure the returned value is of type JValue
     }.toList
 
-    // Step 5: Convert filtered edges to Sigma.js format
+    // Step 4: Convert filtered edges to Sigma.js format
     val edgesJSON: List[JValue] = edges.collect {
       case Edge(srcId, dstId, relationship) if validVertexIds.contains(srcId) && validVertexIds.contains(dstId) =>
         // Generate random coordinates (adjust range if needed)
@@ -50,16 +49,15 @@ object ExportGraph {
         ): JValue
     }.toList
 
-    // Step 6: Combine nodes and edges into a JSON object for Sigma.js
+    // Step 5: Combine nodes and edges into a JSON object for Sigma.js
     val graphJSON: JObject = JObject(
       "nodes" -> JArray(nodesJSON), // Make sure it's List[JValue]
       "edges" -> JArray(edgesJSON)  // Make sure it's List[JValue]
     )
 
-    // Step 7: Convert to compact JSON string
     val jsonString = compact(render(graphJSON))
 
-    // Step 8: Save the JSON to a file
+    // Step 6: Save the JSON to a file
     val outputDir: Path = Paths.get(outputPath).getParent
 
     if (!Files.exists(outputDir)) {
