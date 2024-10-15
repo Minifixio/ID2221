@@ -1,0 +1,5 @@
+id2221/data/*
+.myenv
+.vscode
+.ipynb_checkpoints
+.metals

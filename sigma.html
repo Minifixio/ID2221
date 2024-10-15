@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Sigma.js Example</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sigma.js/2.4.0/sigma.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/graphology/0.25.4/graphology.umd.min.js"></script>
+</head>
+<body style="background: lightgrey">
+    <div id="container" style="width: 800px; height: 600px; background: white"></div>
+    <script>
+      // Load the graph data
+      fetch("./graph2.json") // Ensure to provide the correct path to your JSON file
+        .then(response => response.json())
+        .then(graphData => {
+            console.log(graphData);
+            // Create a graphology graph
+            const graph = new graphology.Graph();
+            console.log(graph);
+            
+            // Add nodes
+            graphData.nodes.forEach(node => {
+                graph.addNode(node.id, { 
+                    label: node.label, 
+                    x: node.x, 
+                    y: node.y, 
+                    size: node.size 
+                });
+            });
+            console.log(graph);
+            
+            // Add edges
+            graphData.edges.forEach(edge => {
+                graph.addEdge(edge.source, edge.target);
+            });
+
+            // Instantiate sigma.js and render the graph
+            const sigmaInstance = new Sigma(graph, document.getElementById("container"));
+        });
+    </script>
+</body>
+</html>
