@@ -50,21 +50,6 @@ object ExportGraph {
         ): JValue
     }.toList
 
-    // val edgesJSON: List[JValue] = edges
-    // .filter { edge =>
-    //   // Only include edges where both source and target are valid
-    //   validVertexIds.contains(edge.srcId) && validVertexIds.contains(edge.dstId)
-    // }
-    // .collect() // Collect the filtered RDD into a local collection
-    // .map { case Edge(srcId, dstId, relationship) =>
-    //   // Map over the collected data to create JSON objects
-    //   JObject(
-    //     "source" -> JInt(srcId),
-    //     "target" -> JInt(dstId)
-    //   ): JValue
-    // }
-    // .toList  // Convert the collected results into a List[JValue]
-
     // Step 6: Combine nodes and edges into a JSON object for Sigma.js
     val graphJSON: JObject = JObject(
       "nodes" -> JArray(nodesJSON), // Make sure it's List[JValue]
@@ -74,10 +59,9 @@ object ExportGraph {
     // Step 7: Convert to compact JSON string
     val jsonString = compact(render(graphJSON))
 
-    // Create a Path object for the output directory
+    // Step 8: Save the JSON to a file
     val outputDir: Path = Paths.get(outputPath).getParent
 
-    // Check if the directory exists, if not, create it
     if (!Files.exists(outputDir)) {
       Files.createDirectories(outputDir) // Create the directory and any missing parent directories
       println(s"Directory created: $outputDir")
@@ -85,7 +69,6 @@ object ExportGraph {
       println(s"Directory already exists: $outputDir")
     }
 
-    // Write the JSON to a file for Sigma.js
     try {
       Files.write(Paths.get(outputPath), jsonString.getBytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
       println(s"Successfully wrote to: $outputPath")
@@ -93,8 +76,5 @@ object ExportGraph {
       case e: Exception =>
         println(s"Error writing to file: ${e.getMessage}")
     }
-
-    // Step 7: Write the JSON to a file for Sigma.js
-    //Files.write(Paths.get(outputPath), jsonString.getBytes)
   }
 }
