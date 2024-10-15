@@ -1,0 +1,101 @@
+[
+  {
+    "id": "558b11bde4b031bae1fb5972",
+    "title": "Close target reconnaissance using autonomous UAV formations",
+    "doi": "10.1109/CDC.2008.4739440",
+    "issue": "",
+    "keywords": [
+      "collision avoidance",
+      "decentralised control",
+      "mobile robots",
+      "remotely operated vehicles",
+      "space vehicles",
+      "autonomous UAV formations",
+      "avoiding obstacles",
+      "close target reconnaissance",
+      "control architecture",
+      "decentralized control scheme",
+      "equilateral triangular formation",
+      "inter-agent collisions",
+      "no-fly-zones",
+      "target position",
+      "unidirectional sensing",
+      "unmanned aerial vehicles"
+    ],
+    "lang": "en",
+    "venue": { "raw": "Cancun" },
+    "year": 2008,
+    "n_citation": 39,
+    "page_start": "1729",
+    "page_end": "1734",
+    "volume": "",
+    "issn": "0191-2216 E-ISBN : 978-1-4244-3124-3",
+    "isbn": "978-1-4244-3124-3",
+    "url": [
+      "http://ieeexplore.ieee.org/xpl/abstractAuthors.jsp?tp=&arnumber=4739440",
+      "http://dx.doi.org/10.1109/CDC.2008.4739440",
+      "http://www.webofknowledge.com/"
+    ],
+    "abstract": "In this paper the problem of close target reconnaissance by a formation of 3 unmanned aerial vehicles (UAVs) is considered. The overall close target reconnaissance (CTR) involves subtasks of avoiding obstacles or no-fly-zones, avoiding inter-agent collisions, reaching a close vicinity of a specified target position, and forming an equilateral triangular formation around the target. The UAVs performing the task fly at constant speeds. A decentralized control scheme is developed for this overall task considering unidirectional sensing/control architecture. Relevant analysis and simulation test results are provided.",
+    "authors": [
+      {
+        "id": "562d71f145cedb3398e0b05a",
+        "name": "Iman Shames",
+        "org": "Res. Sch. of Inf. Sci. & Eng., Australian Nat. Univeristy, Canberra, ACT, Australia|c|"
+      },
+      {
+        "id": "56316ff245cedb3399df815b",
+        "name": "Baris Fidan",
+        "org": "Australian Natl Univ, Res Sch Informat Sci & Engn, Canberra, ACT 0200, Australia"
+      },
+      {
+        "id": "5631b9bb45cedb3399efe923",
+        "name": "Brian D. O. Anderson",
+        "org": "Australian Natl Univ, Res Sch Informat Sci & Engn, Canberra, ACT 0200, Australia"
+      }
+    ],
+    "doc_type": "Conference",
+    "fos": [
+      { "name": "Remotely operated underwater vehicle", "w": 0.51589 },
+      { "name": "Distance measurement", "w": 0.0 },
+      { "name": "Equilateral triangle", "w": 0.43022 },
+      { "name": "Decentralised system", "w": 0.471 },
+      { "name": "Computer science", "w": 0.41831 },
+      { "name": "Control engineering", "w": 0.44854 },
+      { "name": "Mobile robot", "w": 0.49916 }
+    ],
+    "indexed_abstract": {
+      "IndexLength": 85,
+      "InvertedIndex": {
+        "forming": [46],
+        "constant": [61]
+      }
+    },
+    "v12_id": 2121044092,
+    "v12_authors": [
+      {
+        "name": "I. Shames",
+        "org": "Res. Sch. of Inf. Sci. & Eng., Australian Nat. Univeristy, Canberra, ACT, Australia",
+        "id": 1981999085
+      },
+      {
+        "name": "B. Fidan",
+        "org": "Res. Sch. of Inf. Sci. & Eng., Australian Nat. Univeristy, Canberra, ACT, Australia",
+        "id": 2028148069
+      },
+      {
+        "name": "B. Anderson",
+        "org": "Res. Sch. of Inf. Sci. & Eng., Australian Nat. Univeristy, Canberra, ACT, Australia",
+        "id": 2163898492
+      }
+    ],
+    "references": [
+      "53e9a33db7602d9702c48b6f",
+      "558a5c21e4b0b32fcb3659e3",
+      "53e99905b7602d970213fd9e",
+      "53e99b2cb7602d97023c7088",
+      "53e9bd24b7602d97049b2550",
+      "558a5c21e4b0b32fcb3659e3"
+    ]
+  }
+]
