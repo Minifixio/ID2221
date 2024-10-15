@@ -4,16 +4,18 @@ import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
 
 object BuildGraph {
-  def build(jsonFilePath: String): Unit = {
+  def build(hdfsPath: String): (Graph[(String, String, Long), String], Set[VertexId]) = {
     val spark = SparkSession.builder()
       .appName("AcademicGraphAnalysis")
       .config("spark.sql.caseSensitive", "true")
+      .config("spark.master", "local")
       .getOrCreate()
 
     import spark.implicits._
 
+    println("Reading JSON file located at: " + hdfsPath)
     val papersDF = spark.read.option("multiline", "true")
-      .json(jsonFilePath)
+      .json(hdfsPath)
       .select(
         "id",
         "title",
@@ -36,6 +38,8 @@ object BuildGraph {
         .rdd
         .map(row => (row.getAs[String]("id").hashCode.toLong, (row.getAs[String]("id"), row.getAs[String]("title"), row.getAs[Long]("year"))))
 
+    val validVertexIds: Set[VertexId] = vertices.map(_._1).collect().toSet
+
     val edges: RDD[Edge[String]] = papersDF
     .select("id", "references")
     .rdd
@@ -54,6 +58,6 @@ object BuildGraph {
 
     val graph: Graph[(String, String, Long), String] = Graph(vertices, edges)
 
-    return graph
+    return (graph, validVertexIds)
   }
 }

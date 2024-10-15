@@ -1,8 +1,13 @@
-@main def hello(): Unit =
-  println("Starting to build the graph...")
-  graph = BuildGraph.build(os.read(os.pwd / "data" / "dblp_v14-part2266-2.json"))
-  println("Graph built successfully!")
-  ExportGraph.exportGraph(graph, os.read(os.pwd / "data" / "graph-export.json"))
-  println(msg)
+object Main {
 
-def msg = "I was compiled by Scala 3. :)"
+  def hdfsInputPath = "hdfs://localhost:9000/data/dblp_v14-part2266-3.json"
+  def hdfsOutputPath = "data/graph-export.json"
+
+  def main(args: Array[String]): Unit = {
+    println("Starting to build the graph...")
+    var (graph, validVertexIds) = BuildGraph.build(hdfsInputPath)
+    println("Graph built successfully!")
+    ExportGraph.exportGraph(graph, validVertexIds, hdfsOutputPath)
+    println("Graph exported successfully!")
+  }
+}

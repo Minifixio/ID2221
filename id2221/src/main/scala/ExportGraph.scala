@@ -2,54 +2,99 @@ import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 import org.apache.spark.graphx._
-import java.nio.file.{Files, Paths}
+import java.nio.file.{Files, Paths, Path}
 import scala.util.Random
+import org.apache.spark.rdd.RDD
+import java.nio.file.StandardOpenOption
 
 object ExportGraph {
-  def exportGraph(graph: Graph[(String, String, Long), String], outputPath: String): Unit = {
+  def exportGraph(graph: Graph[(String, String, Long), String], validVertexIds: Set[VertexId], outputPath: String): Unit = {
 
-    // Step 1: Collect valid vertex IDs into a Set
-    val validVertexIds: Set[VertexId] = vertices.map(_._1).collect().toSet
+    // Step 1: Collect vertices and edges from RDDs into local collections (Seq)
+    val vertices: Seq[(VertexId, (String, String, Long))] = graph.vertices.collect().toSeq
+    val edges: Seq[Edge[String]] = graph.edges.collect().toSeq
 
-    // Step 2: Filter edges to include only those that point to valid vertices
+    // Step 2: Collect valid vertex IDs into a Set
+    println(s"Number of vertices: ${vertices.length}")
+    println(s"Number of edges: ${edges.length}")
+    println(s"Valid vertex IDs: ${validVertexIds}")
+
+    // Step 3: Filter edges to include only those that point to valid vertices
     val filteredEdges = edges.filter { edge =>
-        validVertexIds.contains(edge.srcId) && validVertexIds.contains(edge.dstId)
+      validVertexIds.contains(edge.srcId) && validVertexIds.contains(edge.dstId)
     }
 
-    // Step 3: Convert vertices to Sigma.js format
+    // Step 4: Convert vertices to Sigma.js format, filtering out null attributes
     val random = new Random()
-    val nodesJSON = vertices.map { case (id, (paperId, title, year)) =>
-    // Generate random coordinates (you may want to adjust the range as needed)
-    val x = random.nextDouble() * 800  // Assuming width of SVG is 800
-    val y = random.nextDouble() * 600  // Assuming height of SVG is 600
-    JObject(
-        "id" -> JInt(id), // Use paperId as the id for the node
-        "label" -> JString(title),
-        "x" -> JDouble(x),  // Use the generated x coordinate
-        "y" -> JDouble(y),  // Use the generated y coordinate
-        "size" -> JInt(3)   // Size can be arbitrary; adjust as necessary
-    )
-    }.collect().toList
+    val nodesJSON: List[JValue] = vertices.collect {
+      case (id, (paperId, title, year)) if paperId != null && title != null =>
+        // Generate random coordinates (adjust range if needed)
+        val x = random.nextDouble() * 800
+        val y = random.nextDouble() * 600
+        JObject(
+          "id" -> JInt(id),         // Vertex ID
+          "label" -> JString(title), // Paper title
+          "x" -> JDouble(x),         // Random x coordinate
+          "y" -> JDouble(y),         // Random y coordinate
+          "size" -> JInt(3)          // Default size
+        ): JValue // Ensure the returned value is of type JValue
+    }.toList
 
-    // Step 4: Convert the filtered edges RDD to a JSON array (JArray)
-    val edgesJSON = filteredEdges.zipWithIndex.map { case (Edge(srcId, dstId, relationship), index) =>
-    JObject(
-        "id" -> JString("e" + index), // Create a unique id for each edge
-        "source" -> JInt(srcId),
-        "target" -> JInt(dstId)
-    )
-    }.collect().toList
+    // Step 5: Convert filtered edges to Sigma.js format
+    val edgesJSON: List[JValue] = edges.collect {
+      case Edge(srcId, dstId, relationship) if validVertexIds.contains(srcId) && validVertexIds.contains(dstId) =>
+        // Generate random coordinates (adjust range if needed)
+        JObject(
+          "source" -> JInt(srcId),
+          "target" -> JInt(dstId)
+        ): JValue
+    }.toList
 
-    // Step 5: Combine nodes and edges into a single JSON object for Sigma
+    // val edgesJSON: List[JValue] = edges
+    // .filter { edge =>
+    //   // Only include edges where both source and target are valid
+    //   validVertexIds.contains(edge.srcId) && validVertexIds.contains(edge.dstId)
+    // }
+    // .collect() // Collect the filtered RDD into a local collection
+    // .map { case Edge(srcId, dstId, relationship) =>
+    //   // Map over the collected data to create JSON objects
+    //   JObject(
+    //     "source" -> JInt(srcId),
+    //     "target" -> JInt(dstId)
+    //   ): JValue
+    // }
+    // .toList  // Convert the collected results into a List[JValue]
+
+    // Step 6: Combine nodes and edges into a JSON object for Sigma.js
     val graphJSON: JObject = JObject(
-        "nodes" -> JArray(nodesJSON),
-        "edges" -> JArray(edgesJSON)
+      "nodes" -> JArray(nodesJSON), // Make sure it's List[JValue]
+      "edges" -> JArray(edgesJSON)  // Make sure it's List[JValue]
     )
 
-    // Step 6: Convert to compact JSON string
+    // Step 7: Convert to compact JSON string
     val jsonString = compact(render(graphJSON))
 
+    // Create a Path object for the output directory
+    val outputDir: Path = Paths.get(outputPath).getParent
+
+    // Check if the directory exists, if not, create it
+    if (!Files.exists(outputDir)) {
+      Files.createDirectories(outputDir) // Create the directory and any missing parent directories
+      println(s"Directory created: $outputDir")
+    } else {
+      println(s"Directory already exists: $outputDir")
+    }
+
+    // Write the JSON to a file for Sigma.js
+    try {
+      Files.write(Paths.get(outputPath), jsonString.getBytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
+      println(s"Successfully wrote to: $outputPath")
+    } catch {
+      case e: Exception =>
+        println(s"Error writing to file: ${e.getMessage}")
+    }
+
     // Step 7: Write the JSON to a file for Sigma.js
-    Files.write(Paths.get(outputPath), jsonString.getBytes)
+    //Files.write(Paths.get(outputPath), jsonString.getBytes)
   }
 }
