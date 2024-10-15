@@ -219,7 +219,7 @@ jupyter notebook
 
 Now you can choose spylon kernel in the kernel list in the notebook.
 
-## Setup the scala project
+## 3. Setup the scala project
 See [https://docs.scala-lang.org/getting-started/index.html](https://docs.scala-lang.org/getting-started/index.html) to setup a Scala project.
 
 Then you can go to the `id2221-scala` folder and run
