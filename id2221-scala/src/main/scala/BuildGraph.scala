@@ -1,20 +1,25 @@
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions._
 import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
 
 object BuildGraph {
-  def build(hdfsPath: String): (Graph[(String, String, Long), String], Set[VertexId]) = {
+  
+  // Enum to represent the type of graph export
+  sealed trait ExportType
+  case object WholeGraph extends ExportType
+  case object ConnectedComponentsGraph extends ExportType
+
+  def build(hdfsPath: String, exportType: ExportType): (Graph[(String, String, Long), String], Set[VertexId]) = {
     val spark = SparkSession.builder()
       .appName("AcademicGraphAnalysis")
       .config("spark.sql.caseSensitive", "true")
       .config("spark.master", "local")
       .config("spark.executor.memory", "16g")
       .config("spark.driver.memory", "16g")
-      .config("spark.executor.extraJavaOptions", "-XX:+UseG1GC")  // Use G1GC only (no Xmx here)
-      .config("spark.driver.extraJavaOptions", "-XX:+UseG1GC")    // Use G1GC only (no Xmx here)
-      .config("spark.memory.fraction", "0.8")   // Use more memory for execution/storage
-      .config("spark.memory.storageFraction", "0.4")  // Adjust how much memory goes to storage
+      .config("spark.executor.extraJavaOptions", "-XX:+UseG1GC")
+      .config("spark.driver.extraJavaOptions", "-XX:+UseG1GC")
+      .config("spark.memory.fraction", "0.8")
+      .config("spark.memory.storageFraction", "0.4")
       .getOrCreate()
 
     import spark.implicits._
@@ -25,45 +30,58 @@ object BuildGraph {
       .select(
         "id",
         "title",
-        "doi",
-        "keywords",
-        "n_citation",
         "year",
-        "issn",
-        "url",
-        "abstract",
-        "authors",
-        "doc_type",
-        "v12_authors",
-        "references",
-        "v12_id"
+        "references"
       )
 
+    // Build vertices (VertexId = hashed paper id, (paper id, title, year))
     val vertices: RDD[(VertexId, (String, String, Long))] = papersDF
-        .select("id", "title", "year")
-        .rdd
-        .map(row => (row.getAs[String]("id").hashCode.toLong, (row.getAs[String]("id"), row.getAs[String]("title"), row.getAs[Long]("year"))))
+      .select("id", "title", "year")
+      .rdd
+      .map(row => (row.getAs[String]("id").hashCode.toLong, (row.getAs[String]("id"), row.getAs[String]("title"), row.getAs[Long]("year"))))
 
-    val validVertexIds: Set[VertexId] = vertices.map(_._1).collect().toSet
-
+    // Build edges based on references
     val edges: RDD[Edge[String]] = papersDF
-    .select("id", "references")
-    .rdd
-    .flatMap(row => {
+      .select("id", "references")
+      .rdd
+      .flatMap(row => {
         val paperId = row.getAs[String]("id").hashCode.toLong
         val references = row.getAs[Seq[String]]("references")
-        
-        // Check if references is not null before mapping
-        if (references != null) {
-            references.map(ref => Edge(paperId, ref.hashCode.toLong, "cites"))
-        } else {
-            // If references is null, return an empty list
-            Seq.empty[Edge[String]]
-        }
-    })
 
+        if (references != null) {
+          references.map(ref => Edge(paperId, ref.hashCode.toLong, "cites"))
+        } else {
+          Seq.empty[Edge[String]]
+        }
+      })
+
+    // Create the initial graph
     val graph: Graph[(String, String, Long), String] = Graph(vertices, edges)
 
-    return (graph, validVertexIds)
+    // Check the type of graph export
+    exportType match {
+      case WholeGraph => 
+        // Return the whole graph as-is
+        val validVertexIds = vertices.map(_._1).collect().toSet
+        (graph, validVertexIds)
+
+      case ConnectedComponentsGraph =>
+        // Find the connected components
+        val connectedComponentsGraph = graph.connectedComponents()
+
+        // Remove isolated nodes (nodes that are their own connected component and have no edges)
+        // First, collect the degrees and then join them
+        val vertexDegrees = graph.degrees.collectAsMap() // Collecting as a map for efficient access
+        val nonIsolatedComponents = connectedComponentsGraph.vertices
+          .filter { case (id, _) => vertexDegrees.getOrElse(id, 0) > 0 } // Exclude nodes with degree 0
+
+        // Collect valid vertex IDs
+        val validVertexIds = nonIsolatedComponents.map(_._1).collect().toSet
+
+        // Now create the non-isolated graph using IDs that are valid
+        val nonIsolatedGraph = graph.subgraph(vpred = (id, _) => validVertexIds.contains(id))
+
+        (nonIsolatedGraph, validVertexIds)
+    }
   }
 }

@@ -12,25 +12,31 @@ object ExportGraph {
   case object JSONFormat extends ExportFormat
   case object CSVFormat extends ExportFormat
 
-  def exportGraph(graph: Graph[(String, String, Long), String], validVertexIds: Set[VertexId], outputPath: String, format: ExportFormat): Unit = {
+  def exportGraph(graph: Graph[(String, String, Long), String], validVertexIds: Set[VertexId], outputPath: String, format: ExportFormat, isConnectedComponents: Boolean = false): Unit = {
     format match {
-      case JSONFormat => exportToJSON(graph, validVertexIds, outputPath)
-      case CSVFormat => exportToCSV(graph, validVertexIds, outputPath)
+      case JSONFormat => exportToJSON(graph, validVertexIds, outputPath, isConnectedComponents)
+      case CSVFormat => exportToCSV(graph, validVertexIds, outputPath, isConnectedComponents)
     }
   }
 
-  // JSON export (same as the previous JSON export but extracted to its own function)
-  def exportToJSON(graph: Graph[(String, String, Long), String], validVertexIds: Set[VertexId], outputPath: String): Unit = {
+  def exportToJSON(graph: Graph[(String, String, Long), String], validVertexIds: Set[VertexId], outputPath: String, isConnectedComponents: Boolean): Unit = {
     val verticesPath = Paths.get(outputPath + "_vertices.json")
     val vertexWriter = Files.newBufferedWriter(verticesPath)
 
     try {
-      // Write the opening JSON array for vertices
       vertexWriter.write("[\n")
       var firstVertex = true
 
       graph.vertices.mapPartitions { partition =>
         partition.flatMap {
+          case (id, (_, _, _)) if isConnectedComponents => 
+            // For connected components, we just need the id
+            val nodeJson = compact(render(
+              JObject(
+                "id" -> JInt(id)
+              )
+            ))
+            Some(nodeJson)
           case (id, (paperId, title, year)) if paperId != null && title != null =>
             val nodeJson = compact(render(
               JObject(
@@ -38,21 +44,19 @@ object ExportGraph {
                 "label" -> JString(title)
               )
             ))
-
             Some(nodeJson)
           case _ => None
         }
       }.collect().foreach { jsonString =>
-        if (!firstVertex) vertexWriter.write(",\n")  // Add a comma between nodes
+        if (!firstVertex) vertexWriter.write(",\n")
         vertexWriter.write(jsonString)
         firstVertex = false
       }
 
-      // Write the closing bracket for the vertices JSON array
       vertexWriter.write("\n]")
 
     } finally {
-      vertexWriter.close() // Ensure the file writer is closed
+      vertexWriter.close()
     }
 
     // Step 2: Process edges and write them incrementally
@@ -60,7 +64,6 @@ object ExportGraph {
     val edgeWriter = Files.newBufferedWriter(edgesPath)
 
     try {
-      // Write the opening JSON array for edges
       edgeWriter.write("[\n")
       var firstEdge = true
 
@@ -77,59 +80,68 @@ object ExportGraph {
           case _ => None
         }
       }.collect().foreach { jsonString =>
-        if (!firstEdge) edgeWriter.write(",\n")  // Add a comma between edges
+        if (!firstEdge) edgeWriter.write(",\n")
         edgeWriter.write(jsonString)
         firstEdge = false
       }
 
-      // Write the closing bracket for the edges JSON array
       edgeWriter.write("\n]")
 
     } finally {
-      edgeWriter.close() // Ensure the file writer is closed
+      edgeWriter.close()
     }
 
     println(s"Graph successfully exported to $outputPath in JSON format")
   }
 
-    // CSV export with sanitized titles
-  def exportToCSV(graph: Graph[(String, String, Long), String], validVertexIds: Set[VertexId], outputPath: String): Unit = {
-    // Helper function to sanitize text by keeping only letters, numbers, and spaces
+  def exportToCSV(graph: Graph[(String, String, Long), String], validVertexIds: Set[VertexId], outputPath: String, isConnectedComponents: Boolean): Unit = {
     def sanitize(text: String): String = {
-      text.replaceAll("[^a-zA-Z0-9\\s]", "")  // Remove all characters except letters, numbers, and spaces
+      text.replaceAll("[^a-zA-Z0-9\\s]", "")
     }
 
     // Step 1: Collect vertices and create a map from vertex ID to sanitized paper title
-    val vertexIdToTitle: Map[VertexId, String] = graph.vertices
-      .filter {
-        case (id, attr) => attr match {
-          case (paperId: String, title: String, year: Long) => paperId != null && title != null
-          case _ => false // Handle cases where the attribute is null or not a tuple with 3 elements
+    val vertexIdToTitle: Map[VertexId, String] = if (!isConnectedComponents) {
+      graph.vertices
+        .filter {
+          case (id, attr) => attr match {
+            case (paperId: String, title: String, year: Long) => paperId != null && title != null
+            case _ => false
+          }
         }
-      }
-      .map {
-        case (id, (paperId: String, title: String, year: Long)) => (id, sanitize(title))
-      }
-      .collect()
-      .toMap
+        .map {
+          case (id, (paperId: String, title: String, year: Long)) => (id, sanitize(title))
+        }
+        .collect()
+        .toMap
+    } else {
+      Map.empty[VertexId, String] // No titles needed for connected components
+    }
 
     // Step 2: Create edges CSV
     val edgesPath = Paths.get(outputPath + "_edges.csv")
     val edgeWriter = Files.newBufferedWriter(edgesPath)
 
     try {
-      // Write header for edges
       edgeWriter.write("source;target\n")
 
-      // Process edges and write each to CSV using the sanitized titles instead of IDs
       graph.edges.mapPartitions { partition =>
         partition.flatMap {
           case Edge(srcId, dstId, relationship) if validVertexIds.contains(srcId) && validVertexIds.contains(dstId) =>
-            // Look up the sanitized titles for the source and target IDs
-            for {
-              srcTitle <- vertexIdToTitle.get(srcId)
-              dstTitle <- vertexIdToTitle.get(dstId)
-            } yield s"$srcTitle;$dstTitle"
+            if (isConnectedComponents) {
+              // For connected components, just output ids
+              Some(s"$srcId;$dstId")
+            } else {
+              // Use sanitized titles for normal graphs
+              // Safely retrieve titles with an option
+              val srcTitleOpt = vertexIdToTitle.get(srcId)
+              val dstTitleOpt = vertexIdToTitle.get(dstId)
+              
+              // Use `for-comprehension` to construct the CSV line only if both titles are present
+              for {
+                srcTitle <- srcTitleOpt
+                dstTitle <- dstTitleOpt
+              } yield s"$srcTitle;$dstTitle"
+            }
           case _ => None
         }
       }.collect().foreach { csvLine =>
@@ -137,25 +149,27 @@ object ExportGraph {
       }
 
     } finally {
-      edgeWriter.close() // Ensure the file writer is closed
+      edgeWriter.close()
     }
+
 
     // Step 3: Create metadata CSV for vertices
     val metadataPath = Paths.get(outputPath + "_metadata.csv")
     val metadataWriter = Files.newBufferedWriter(metadataPath)
 
     try {
-      // Write header for metadata
       metadataWriter.write("id;color;size\n")
 
-      // Process vertices and write sanitized metadata for each vertex to CSV
-      val color = "red" // Same color for all nodes, you can change this logic
-      val size = 10     // Same size for all nodes, you can change this logic
+      // This metadata creation logic is the same for both types of graphs
+      val color = "red"
+      val size = 10
 
       graph.vertices.mapPartitions { partition =>
         partition.flatMap {
-          case (id, (paperId, title, year)) if paperId != null && title != null =>
+          case (id, (paperId, title, year)) if !isConnectedComponents && paperId != null && title != null =>
             Some(s"${sanitize(title)};$color;$size")
+          case (id, _) if isConnectedComponents =>
+            Some(s"$id;$color;$size") // Just output id for connected components
           case _ => None
         }
       }.collect().foreach { csvLine =>
@@ -163,9 +177,8 @@ object ExportGraph {
       }
 
     } finally {
-      metadataWriter.close() // Ensure the file writer is closed
+      metadataWriter.close()
     }
-
-    println(s"Graph successfully exported to $outputPath in CSV format")
   }
 }
+
