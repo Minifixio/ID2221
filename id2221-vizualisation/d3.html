@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>D3 Force Graph</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: "Arial", sans-serif;
+    }
+    .node circle {
+      fill: #1f77b4;
+      stroke: #fff;
+      stroke-width: 1.5px;
+    }
+    .link {
+      stroke: #999;
+      stroke-opacity: 0.6;
+    }
+    .node text {
+      pointer-events: none;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <svg width="800" height="600"></svg>
+
+  <script>
+    const svg = d3.select("svg"),
+          width = +svg.attr("width"),
+          height = +svg.attr("height");
+
+    // Create a force simulation
+    const simulation = d3.forceSimulation()
+      .force("link", d3.forceLink().id(d => d.id).distance(100))
+      .force("charge", d3.forceManyBody().strength(-300))
+      .force("center", d3.forceCenter(width / 2, height / 2));
+
+    // Load the graph data
+    d3.json("graph-export-vertices.json").then(nodes => {
+        d3.json("graph-export-edges.json").then(links => {
+      
+        // Draw links (edges)
+        const link = svg.append("g")
+            .attr("class", "links")
+            .selectAll("line")
+            .data(links)
+            .enter().append("line")
+            .attr("class", "link");
+
+        // Draw nodes
+        const node = svg.append("g")
+            .attr("class", "nodes")
+            .selectAll("g")
+            .data(nodes)
+            .enter().append("g");
+
+        node.append("circle")
+            .attr("r", 5);
+
+        node.append("text")
+            .attr("x", 6)
+            .attr("y", 3)
+            .text(d => d.label);
+
+        // Update the positions of nodes and links on every tick
+        simulation
+            .nodes(nodes)
+            .on("tick", () => {
+            link
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+
+            node
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+            });
+
+        // Update the links
+        simulation.force("link")
+            .links(links);
+        });
+    });
+
+  </script>
+</body>
+</html>

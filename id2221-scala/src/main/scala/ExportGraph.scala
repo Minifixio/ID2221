@@ -3,76 +3,169 @@ import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 import org.apache.spark.graphx._
 import java.nio.file.{Files, Paths, Path}
-import scala.util.Random
-import org.apache.spark.rdd.RDD
 import java.nio.file.StandardOpenOption
+import org.apache.spark.rdd.RDD
 
 object ExportGraph {
-  def exportGraph(graph: Graph[(String, String, Long), String], validVertexIds: Set[VertexId], outputPath: String): Unit = {
 
-    // Step 1: Collect vertices and edges from RDDs into local collections (Seq)
-    val vertices: Seq[(VertexId, (String, String, Long))] = graph.vertices.collect().toSeq
-    val edges: Seq[Edge[String]] = graph.edges.collect().toSeq
+  sealed trait ExportFormat
+  case object JSONFormat extends ExportFormat
+  case object CSVFormat extends ExportFormat
 
-    println(s"Number of vertices: ${vertices.length}")
-    println(s"Number of edges: ${edges.length}")
-    println(s"Valid vertex IDs: ${validVertexIds}")
-
-    // Step 2: Filter edges to include only those that point to valid vertices
-    val filteredEdges = edges.filter { edge =>
-      validVertexIds.contains(edge.srcId) && validVertexIds.contains(edge.dstId)
+  def exportGraph(graph: Graph[(String, String, Long), String], validVertexIds: Set[VertexId], outputPath: String, format: ExportFormat): Unit = {
+    format match {
+      case JSONFormat => exportToJSON(graph, validVertexIds, outputPath)
+      case CSVFormat => exportToCSV(graph, validVertexIds, outputPath)
     }
+  }
 
-    // Step 3: Convert vertices to Sigma.js format, filtering out null attributes
-    val random = new Random()
-    val nodesJSON: List[JValue] = vertices.collect {
-      case (id, (paperId, title, year)) if paperId != null && title != null =>
-        // Generate random coordinates (adjust range if needed)
-        val x = random.nextDouble() * 800
-        val y = random.nextDouble() * 600
-        JObject(
-          "id" -> JInt(id),         // Vertex ID
-          "label" -> JString(title), // Paper title
-          "x" -> JDouble(x),         // Random x coordinate
-          "y" -> JDouble(y),         // Random y coordinate
-          "size" -> JInt(3)          // Default size
-        ): JValue // Ensure the returned value is of type JValue
-    }.toList
-
-    // Step 4: Convert filtered edges to Sigma.js format
-    val edgesJSON: List[JValue] = edges.collect {
-      case Edge(srcId, dstId, relationship) if validVertexIds.contains(srcId) && validVertexIds.contains(dstId) =>
-        // Generate random coordinates (adjust range if needed)
-        JObject(
-          "source" -> JInt(srcId),
-          "target" -> JInt(dstId)
-        ): JValue
-    }.toList
-
-    // Step 5: Combine nodes and edges into a JSON object for Sigma.js
-    val graphJSON: JObject = JObject(
-      "nodes" -> JArray(nodesJSON), // Make sure it's List[JValue]
-      "edges" -> JArray(edgesJSON)  // Make sure it's List[JValue]
-    )
-
-    val jsonString = compact(render(graphJSON))
-
-    // Step 6: Save the JSON to a file
-    val outputDir: Path = Paths.get(outputPath).getParent
-
-    if (!Files.exists(outputDir)) {
-      Files.createDirectories(outputDir) // Create the directory and any missing parent directories
-      println(s"Directory created: $outputDir")
-    } else {
-      println(s"Directory already exists: $outputDir")
-    }
+  // JSON export (same as the previous JSON export but extracted to its own function)
+  def exportToJSON(graph: Graph[(String, String, Long), String], validVertexIds: Set[VertexId], outputPath: String): Unit = {
+    val verticesPath = Paths.get(outputPath + "_vertices.json")
+    val vertexWriter = Files.newBufferedWriter(verticesPath)
 
     try {
-      Files.write(Paths.get(outputPath), jsonString.getBytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
-      println(s"Successfully wrote to: $outputPath")
-    } catch {
-      case e: Exception =>
-        println(s"Error writing to file: ${e.getMessage}")
+      // Write the opening JSON array for vertices
+      vertexWriter.write("[\n")
+      var firstVertex = true
+
+      graph.vertices.mapPartitions { partition =>
+        partition.flatMap {
+          case (id, (paperId, title, year)) if paperId != null && title != null =>
+            val nodeJson = compact(render(
+              JObject(
+                "id" -> JInt(id),
+                "label" -> JString(title)
+              )
+            ))
+
+            Some(nodeJson)
+          case _ => None
+        }
+      }.collect().foreach { jsonString =>
+        if (!firstVertex) vertexWriter.write(",\n")  // Add a comma between nodes
+        vertexWriter.write(jsonString)
+        firstVertex = false
+      }
+
+      // Write the closing bracket for the vertices JSON array
+      vertexWriter.write("\n]")
+
+    } finally {
+      vertexWriter.close() // Ensure the file writer is closed
     }
+
+    // Step 2: Process edges and write them incrementally
+    val edgesPath = Paths.get(outputPath + "_edges.json")
+    val edgeWriter = Files.newBufferedWriter(edgesPath)
+
+    try {
+      // Write the opening JSON array for edges
+      edgeWriter.write("[\n")
+      var firstEdge = true
+
+      graph.edges.mapPartitions { partition =>
+        partition.flatMap {
+          case Edge(srcId, dstId, relationship) if validVertexIds.contains(srcId) && validVertexIds.contains(dstId) =>
+            val edgeJson = compact(render(
+              JObject(
+                "source" -> JInt(srcId),
+                "target" -> JInt(dstId)
+              )
+            ))
+            Some(edgeJson)
+          case _ => None
+        }
+      }.collect().foreach { jsonString =>
+        if (!firstEdge) edgeWriter.write(",\n")  // Add a comma between edges
+        edgeWriter.write(jsonString)
+        firstEdge = false
+      }
+
+      // Write the closing bracket for the edges JSON array
+      edgeWriter.write("\n]")
+
+    } finally {
+      edgeWriter.close() // Ensure the file writer is closed
+    }
+
+    println(s"Graph successfully exported to $outputPath in JSON format")
+  }
+
+    // CSV export with sanitized titles
+  def exportToCSV(graph: Graph[(String, String, Long), String], validVertexIds: Set[VertexId], outputPath: String): Unit = {
+    // Helper function to sanitize text by keeping only letters, numbers, and spaces
+    def sanitize(text: String): String = {
+      text.replaceAll("[^a-zA-Z0-9\\s]", "")  // Remove all characters except letters, numbers, and spaces
+    }
+
+    // Step 1: Collect vertices and create a map from vertex ID to sanitized paper title
+    val vertexIdToTitle: Map[VertexId, String] = graph.vertices
+      .filter {
+        case (id, attr) => attr match {
+          case (paperId: String, title: String, year: Long) => paperId != null && title != null
+          case _ => false // Handle cases where the attribute is null or not a tuple with 3 elements
+        }
+      }
+      .map {
+        case (id, (paperId: String, title: String, year: Long)) => (id, sanitize(title))
+      }
+      .collect()
+      .toMap
+
+    // Step 2: Create edges CSV
+    val edgesPath = Paths.get(outputPath + "_edges.csv")
+    val edgeWriter = Files.newBufferedWriter(edgesPath)
+
+    try {
+      // Write header for edges
+      edgeWriter.write("source;target\n")
+
+      // Process edges and write each to CSV using the sanitized titles instead of IDs
+      graph.edges.mapPartitions { partition =>
+        partition.flatMap {
+          case Edge(srcId, dstId, relationship) if validVertexIds.contains(srcId) && validVertexIds.contains(dstId) =>
+            // Look up the sanitized titles for the source and target IDs
+            for {
+              srcTitle <- vertexIdToTitle.get(srcId)
+              dstTitle <- vertexIdToTitle.get(dstId)
+            } yield s"$srcTitle;$dstTitle"
+          case _ => None
+        }
+      }.collect().foreach { csvLine =>
+        edgeWriter.write(csvLine + "\n")
+      }
+
+    } finally {
+      edgeWriter.close() // Ensure the file writer is closed
+    }
+
+    // Step 3: Create metadata CSV for vertices
+    val metadataPath = Paths.get(outputPath + "_metadata.csv")
+    val metadataWriter = Files.newBufferedWriter(metadataPath)
+
+    try {
+      // Write header for metadata
+      metadataWriter.write("id;color;size\n")
+
+      // Process vertices and write sanitized metadata for each vertex to CSV
+      val color = "red" // Same color for all nodes, you can change this logic
+      val size = 10     // Same size for all nodes, you can change this logic
+
+      graph.vertices.mapPartitions { partition =>
+        partition.flatMap {
+          case (id, (paperId, title, year)) if paperId != null && title != null =>
+            Some(s"${sanitize(title)};$color;$size")
+          case _ => None
+        }
+      }.collect().foreach { csvLine =>
+        metadataWriter.write(csvLine + "\n")
+      }
+
+    } finally {
+      metadataWriter.close() // Ensure the file writer is closed
+    }
+
+    println(s"Graph successfully exported to $outputPath in CSV format")
   }
 }

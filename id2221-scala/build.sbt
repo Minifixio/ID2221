@@ -19,6 +19,10 @@ lazy val root = project
     javaOptions ++= Seq(
       "--add-opens=java.base/java.net=ALL-UNNAMED",
       "--add-opens=java.base/java.lang=ALL-UNNAMED",
-      "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED"
+      "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+      "-Xmx8g",                      // Increase max heap size to 8GB
+      "-XX:+UseG1GC",                // Use the G1 garbage collector
+      "-XX:+PrintGCDetails",         // Optionally, print GC details
+      "-XX:+PrintGCTimeStamps"       // Optionally, print GC timestamps
     )
   )

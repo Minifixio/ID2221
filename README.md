@@ -245,6 +245,14 @@ object Main {
 }
 ```
 
+## Misc
+### Put on HDFS
+```bash
+hdfs dfs -put dblp_v14-part2266-3.json /dblp_v14-part2266-3.json  
+```
 
-
+### Add more computing capacity
+```bash
+export SBT_OPTS="-Xmx8g -XX:+UseG1GC"
+```
 

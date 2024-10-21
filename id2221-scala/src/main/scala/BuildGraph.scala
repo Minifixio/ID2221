@@ -9,6 +9,12 @@ object BuildGraph {
       .appName("AcademicGraphAnalysis")
       .config("spark.sql.caseSensitive", "true")
       .config("spark.master", "local")
+      .config("spark.executor.memory", "16g")
+      .config("spark.driver.memory", "16g")
+      .config("spark.executor.extraJavaOptions", "-XX:+UseG1GC")  // Use G1GC only (no Xmx here)
+      .config("spark.driver.extraJavaOptions", "-XX:+UseG1GC")    // Use G1GC only (no Xmx here)
+      .config("spark.memory.fraction", "0.8")   // Use more memory for execution/storage
+      .config("spark.memory.storageFraction", "0.4")  // Adjust how much memory goes to storage
       .getOrCreate()
 
     import spark.implicits._
