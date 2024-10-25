@@ -12,10 +12,13 @@ object ExportGraph {
   case object JSONFormat extends ExportFormat
   case object CSVFormat extends ExportFormat
 
-  def exportGraph(graph: Graph[(String, String, Long), String], validVertexIds: Set[VertexId], outputPath: String, format: ExportFormat, isConnectedComponents: Boolean = false): Unit = {
+  def exportGraph(graph: Graph[(String, String, Long), String], validVertexIds: Set[VertexId], outputPath: String, format: ExportFormat, isConnectedComponents: Boolean = false, componentPapers: Map[VertexId, List[String]] = Map()): Unit = {
     format match {
       case JSONFormat => exportToJSON(graph, validVertexIds, outputPath, isConnectedComponents)
       case CSVFormat => exportToCSV(graph, validVertexIds, outputPath, isConnectedComponents)
+      if (isConnectedComponents && componentPapers.nonEmpty) { 
+        exportConnectedComponentGroups(outputPath, componentPapers)
+      }
     }
   }
 
@@ -118,7 +121,12 @@ object ExportGraph {
     }
 
     // Step 2: Create edges CSV
-    val edgesPath = Paths.get(outputPath + "_edges.csv")
+    var edgesPath: Path = null
+    if (isConnectedComponents) {
+      edgesPath = Paths.get(outputPath + "_cc_edges.csv")
+    } else {
+      edgesPath = Paths.get(outputPath + "_cc_metadata.csv")
+    }
     val edgeWriter = Files.newBufferedWriter(edgesPath)
 
     try {
@@ -154,7 +162,13 @@ object ExportGraph {
 
 
     // Step 3: Create metadata CSV for vertices
-    val metadataPath = Paths.get(outputPath + "_metadata.csv")
+    var metadataPath: Path = null
+    if (isConnectedComponents) {
+      metadataPath = Paths.get(outputPath + "_cc_metadata.csv")
+    } else {
+      metadataPath = Paths.get(outputPath + "_metadata.csv")
+    }
+    
     val metadataWriter = Files.newBufferedWriter(metadataPath)
 
     try {
@@ -178,6 +192,34 @@ object ExportGraph {
 
     } finally {
       metadataWriter.close()
+    }
+  }
+
+  def exportConnectedComponentGroups(outputPath: String, componentPapers: Map[VertexId, List[String]] = Map()) {
+    // Export the list of papers in each connected component if available
+    val componentsPath = Paths.get(outputPath + "_components.json")
+    val componentsWriter = Files.newBufferedWriter(componentsPath)
+
+    try {
+      componentsWriter.write("[\n")
+      var firstComponent = true
+
+      componentPapers.foreach { case (componentId, papers) =>
+        if (!firstComponent) componentsWriter.write(",\n")
+
+        val componentJson = compact(render(
+          JObject(
+            "componentId" -> JInt(componentId),
+            "papers" -> JArray(papers.map(paperId => JString(paperId)).toList)
+          )
+        ))
+        componentsWriter.write(componentJson)
+        firstComponent = false
+      } 
+
+      componentsWriter.write("\n]")
+    } finally {
+      componentsWriter.close()
     }
   }
 }

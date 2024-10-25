@@ -1,6 +1,86 @@
-# ID2221 : Setup help
+# ID2221 : How to use ?
 
-## 1. Setting up HDFS on MacOS
+# Graph Export Program for DBLP Data
+
+This program builds and exports graphs from JSON data, allowing users to filter vertices based on criteria such as connected components and degree thresholds. Follow the steps below to set up, run, and customize the graph export.
+
+## Prerequisites
+1. **Scala Installation**  
+   Install Scala version 2.11.8. Ensure it’s correctly installed by running:
+   ```bash
+   scala -version
+   ```
+
+2. **HDFS Setup**  
+   The program expects input data in HDFS (Hadoop Distributed File System). The data file should be a valid JSON file, for example:
+   ```bash
+   hdfs dfs -put dblp_v14-part2266-3.json /dblp_v14-part2266-3.json
+   ```
+
+## Usage
+
+### 1. Set Up the Input Path
+   In `Main.scala`, specify the path to your data in HDFS:
+   ```scala
+   def hdfsInputPath = "hdfs://localhost:9000/user/emile/dblp_v14-part2-3.json"
+   ```
+
+### 2. Set Up the Output Path
+   Choose a local path for the graph export files:
+   ```scala
+   def hdfsOutputPath = "data/graph-export"
+   ```
+
+### 3. Configure the Graph Build Parameters
+   Choose the parameters for `buildGraph` in `Main.scala`:
+   ```scala
+   var (graph, validVertexIds, componentPapersMap) = BuildGraph.build(hdfsInputPath, BuildGraph.ConnectedComponentsGraph, 50, 1)
+   ```
+   - **`minComponentSize`**: Minimum size of connected components to include in the graph.
+   - **`minDegree`**: Minimum degree (number of edges) for a vertex to be included in the graph.
+
+### 4. Export the Graph
+   Select the export format (JSON or CSV) and options for connected components in `exportGraph`:
+   ```scala
+   ExportGraph.exportGraph(graph, validVertexIds, hdfsOutputPath, ExportGraph.JSONFormat, true, componentPapersMap)
+   ```
+   - **`outputPath`**: Output directory.
+   - **`format`**: Export format, choose between `ExportGraph.JSONFormat` and `ExportGraph.CSVFormat`.
+   - **`isConnectedComponents`**: If true, the program exports only connected components.
+   - **`componentPapers`**: Optional mapping of connected component nodes to their related papers.
+
+### 5. Run the Program
+   In the main project directory (`id2221-scala`), use `sbt` to compile and run the project:
+   ```bash
+   sbt run
+   ```
+
+### 6. Troubleshooting
+   If you encounter memory heap issues, try increasing the heap size:
+   ```bash
+   export SBT_OPTS="-Xmx8g -XX:+UseG1GC"
+   ```
+
+## Example Main Program
+The following example demonstrates a basic run configuration:
+```scala
+object Main {
+  def hdfsInputPath = "hdfs://localhost:9000/user/emile/dblp_v14-part2-3.json"
+  def hdfsOutputPath = "data/graph-export"
+
+  def main(args: Array[String]): Unit = {
+    println("Starting to build the graph...")
+    val (graph, validVertexIds, componentPapersMap) = BuildGraph.build(hdfsInputPath, BuildGraph.ConnectedComponentsGraph, 50, 1)
+    println("Graph built successfully!")
+    ExportGraph.exportGraph(graph, validVertexIds, hdfsOutputPath, ExportGraph.JSONFormat, true, componentPapersMap)
+    println("Graph exported successfully!")
+  }
+}
+```
+
+
+# Troubleshooting
+## Troubles with setting up HDFS on MacOS ?
 ### Step 1: Get Homebrew
 You can find instrucitons to get it at [https://brew.sh/](https://brew.sh/).
 
@@ -193,7 +273,7 @@ Then go to `id2221-scala/data` and copy file :
 hdfs dfs -put [FILE_NAME].json data/[FILE_NAME].json  
 ```
 
-## 2. Setup the notebook
+## Setup the notebook to perform some tests ?
 ### Step 1: Install Jupyter
 See [https://jupyter.org/install](https://jupyter.org/install).
 
@@ -219,34 +299,9 @@ jupyter notebook
 
 Now you can choose spylon kernel in the kernel list in the notebook.
 
-## 3. Setup the scala project
-See [https://docs.scala-lang.org/getting-started/index.html](https://docs.scala-lang.org/getting-started/index.html) to setup a Scala project.
 
-Then you can go to the `id2221-scala` folder and run
-```bash
-sbt run
-```
-
-Make sure to change the input and output file path in the `id2221-scala/src/main/scala/Main.scala` file if you want to :
-
-```scala
-object Main {
-
-  def hdfsInputPath = "hdfs://localhost:9000/data/dblp_v14-part2266-3.json"
-  def hdfsOutputPath = "data/graph-export.json"
-
-  def main(args: Array[String]): Unit = {
-    println("Starting to build the graph...")
-    var (graph, validVertexIds) = BuildGraph.build(hdfsInputPath)
-    println("Graph built successfully!")
-    ExportGraph.exportGraph(graph, validVertexIds, hdfsOutputPath)
-    println("Graph exported successfully!")
-  }
-}
-```
-
-## Misc
-### Put on HDFS
+## Additional informations
+### Put a file on HDFS
 ```bash
 hdfs dfs -put dblp_v14-part2266-3.json /dblp_v14-part2266-3.json  
 ```
